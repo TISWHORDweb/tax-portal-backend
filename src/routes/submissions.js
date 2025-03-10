@@ -3,6 +3,9 @@ import { authenticateToken } from '../middleware/auth.js';
 import { handleMulterError, uploadSubmissionMain, uploadSupportingDocs } from '../middleware/upload.js';
 import Submission from '../models/Submission.js';
 import multer from 'multer';
+import User from '../models/User.js';
+import { sendAdminTaxSubmissionNotification, sendUserTaxSubmissionEmail } from '../services/index.js';
+// import { sendUserTaxSubmissionEmail } from '../utils/notify.js';
 
 const router = express.Router();
 
@@ -38,7 +41,7 @@ router.post(
       { name: 'supportingDoc', maxCount: 1 },
     ]);
 
-    upload(req, res, function(err) {
+    upload(req, res, function (err) {
       if (err instanceof multer.MulterError) {
         return res.status(400).json({ message: err.message });
       } else if (err) {
@@ -56,9 +59,17 @@ router.post(
         return res.status(400).json({ message: 'Please upload the main template file' });
       }
 
+      const user = await User.findOne({ _id: req.user.id })
+      const admins = await User.find({ role: "admin" })
+
+      const userData = {
+        email: user.email,
+        name: user.name
+      };
+
       const mainFile = req.files.mainFile[0];
       const supportingDoc = req.files.supportingDoc[0];
-    
+
 
       const submission = new Submission({
         userId: req.user.id,
@@ -72,6 +83,18 @@ router.post(
       });
 
       await submission.save();
+      await sendUserTaxSubmissionEmail(userData)
+
+      for (const admin of admins) {
+        const adminData = {
+          adminEmail: admin.email,
+          email: user.email,
+          name: user.name,
+        };
+
+        await sendAdminTaxSubmissionNotification(adminData);
+      }
+
       res.status(201).json(submission);
     } catch (error) {
       console.error('Error creating submission:', error.message);

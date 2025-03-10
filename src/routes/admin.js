@@ -3,6 +3,7 @@ import { authenticateToken, isAdmin } from '../middleware/auth.js';
 import User from '../models/User.js';
 import Submission from '../models/Submission.js';
 import Template from '../models/Template.js';
+import { sendTaxSubmissionApprovedEmail, sendTaxSubmissionDeclinedEmail } from '../services/index.js';
 
 const router = express.Router();
 
@@ -233,8 +234,14 @@ router.put('/submissions/:id/approve', [authenticateToken, isAdmin], async (req,
     submission.reviewedAt = new Date();
     submission.reviewedBy = req.user.id;
     submission.reviewComments = req.body.reviewComments;
-
     await submission.save();
+    const user = await User.findById({_id: submission.userId});
+  
+    const userData = {
+      email: user.email,
+      name: user.name
+    };
+    await sendTaxSubmissionApprovedEmail(userData)
     res.json(submission);
   } catch (error) {
     console.error('Error approving submission:', error.message);
@@ -262,6 +269,13 @@ router.put('/submissions/:id/reject', [authenticateToken, isAdmin], async (req, 
     submission.reviewComments = req.body.reviewComments;
 
     await submission.save();
+    const user = await User.findById({_id: submission.userId});
+  
+    const userData = {
+      email: user.email,
+      name: user.name
+    };
+    await sendTaxSubmissionDeclinedEmail(userData)
     res.json(submission);
   } catch (error) {
     console.error('Error rejecting submission:', error.message);
